@@ -83,3 +83,11 @@ repos:
           - --exit-code=1
           - --ignorefile=./.trivyignore.yaml
           - ./
+
+  - repo: https://github.com/ansible-community/ansible-lint
+    rev: v26.8.0
+    hooks:
+      - id: ansible-lint
+        additional_dependencies:
+          - "ansible"
+          - "jmespath"
