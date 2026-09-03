@@ -8,12 +8,12 @@
     - role: general
       tags:
         - general
-    - hashicorp-repo
-    - role: vault-agent
+    - hashicorp_repo
+    - role: vault_agent
       tags:
-        - vault-agent
+        - vault_agent
       vars:
-        marker_name: nomad-server
+        vault_agent_marker_name: nomad-server
         vault_agent_certificates:
           - name: nomad-server
             cert_request: nomad_cert_request
@@ -27,6 +27,6 @@
       tags:
         - nomad
 
-    - role: nomad-server
+    - role: nomad_server
       tags:
-        - nomad-server
+        - nomad_server

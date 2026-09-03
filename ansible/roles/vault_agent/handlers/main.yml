@@ -10,4 +10,4 @@
   ansible.builtin.systemd_service:
     name: consul
     state: reloaded
-  when: marker_name == 'consul-server'
+  when: vault_agent_marker_name == 'consul-server'

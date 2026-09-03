@@ -8,12 +8,12 @@
     - role: general
       tags:
         - general
-    - hashicorp-repo
-    - role: vault-agent
+    - hashicorp_repo
+    - role: vault_agent
       tags:
-        - vault-agent
+        - vault_agent
       vars:
-        marker_name: consul-server
+        vault_agent_marker_name: consul-server
         vault_agent_certificates:
           - name: consul-server
             cert_request: consul_cert_request
@@ -32,6 +32,6 @@
     - role: consul
       tags:
         - consul
-    - role: consul-server
+    - role: consul_server
       tags:
-        - consul-server
+        - consul_server

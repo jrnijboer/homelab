@@ -8,12 +8,12 @@
     - role: general
       tags:
         - general
-    - hashicorp-repo
-    - role: vault-agent
+    - hashicorp_repo
+    - role: vault_agent
       tags:
-        - vault-agent
+        - vault_agent
       vars:
-        marker_name: vault-server
+        vault_agent_marker_name: vault-server
         vault_agent_certificates:
           - name: vault-server
             cert_request: home_cert_request
@@ -27,6 +27,6 @@
       tags:
         - vault
 
-    - role: vault-server
+    - role: vault_server
       tags:
-        - vault-server
+        - vault_server

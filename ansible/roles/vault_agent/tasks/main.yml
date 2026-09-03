@@ -110,18 +110,18 @@
 - name: Validate the Vault Agent marker name
   ansible.builtin.assert:
     that:
-      - marker_name is defined
-      - marker_name | length > 0
-      - marker_name is match('^[A-Za-z0-9._-]+$')
+      - vault_agent_marker_name is defined
+      - vault_agent_marker_name | length > 0
+      - vault_agent_marker_name is match('^[A-Za-z0-9._-]+$')
     fail_msg: >-
-      Set marker_name to a non-empty identifier containing only letters,
+      Set vault_agent_marker_name to a non-empty identifier containing only letters,
       numbers, dots, underscores, or hyphens.
 
 - name: Manage Vault Agent template blocks
   ansible.builtin.blockinfile:
     path: /etc/vault-agent.d/vault-agent-config.hcl
     block: "{{ lookup('template', 'vault-agent-config.hcl.j2') }}"
-    marker: "# {mark} ANSIBLE MANAGED VAULT AGENT TEMPLATES for {{ marker_name }}"
+    marker: "# {mark} ANSIBLE MANAGED VAULT AGENT TEMPLATES for {{ vault_agent_marker_name }}"
     owner: root
     group: root
     mode: '0600'
