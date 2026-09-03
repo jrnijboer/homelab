@@ -1,0 +1,32 @@
+---
+- name: Install HashiCorp Vault
+  hosts: vault_servers
+  become: true
+  gather_facts: true
+
+  roles:
+    - role: general
+      tags:
+        - general
+    - hashicorp-repo
+    - role: vault-agent
+      tags:
+        - vault-agent
+      vars:
+        marker_name: vault-server
+        vault_agent_certificates:
+          - name: vault-server
+            cert_request: home_cert_request
+            common_name: vault.home
+            ip_sans: 127.0.0.1,{{ ansible_facts['default_ipv4']['address'] }}
+            alt_names: localhost,{{ ansible_facts['hostname'] }}.home
+            command: systemctl reload vault
+            product: vault
+
+    - role: vault
+      tags:
+        - vault
+
+    - role: vault-server
+      tags:
+        - vault-server

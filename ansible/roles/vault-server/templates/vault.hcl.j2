@@ -1,0 +1,55 @@
+ui = true
+
+log_file = "/var/log/vault/vault.log"
+log_rotate_duration = "24h"
+log_rotate_max_files = 14
+
+storage "raft" {
+  path = "/opt/vault/raftdb"
+  node_id = "raft_{{ ansible_facts['hostname'] }}"
+
+{% for host in groups['vault_servers'] %}
+{% if host != inventory_hostname %}
+  retry_join {
+    leader_api_addr = "https://{{ host }}.home:8200"
+    leader_ca_cert_file = "/etc/ca/nijboer.home.root.pem"
+    leader_client_cert_file = "/etc/vault.d/tls/vault-server-cert.pem"
+    leader_client_key_file = "/etc/vault.d/tls/vault-server-key.pem"
+  }
+{% endif %}
+{% endfor %}
+}
+
+cluster_addr = "http://{{ ansible_facts['default_ipv4']['address'] }}:8201"
+api_addr      = "http://{{ ansible_facts['default_ipv4']['address'] }}:8200"
+
+disable_mlock = true
+
+
+# HTTP localhost listener
+listener "tcp" {
+  address       = "127.0.0.1:8200"
+  tls_disable = true
+}
+
+# HTTPS lan listener
+listener "tcp" {
+  address       = "{{ ansible_facts['default_ipv4']['address'] }}:8200"
+  tls_disable   = false
+  tls_cert_file = "/etc/vault.d/tls/vault-server-cert.pem"
+  tls_key_file  = "/etc/vault.d/tls/vault-server-key.pem"
+}
+
+service_registration "consul" {
+  address = "http://127.0.0.1:8500"
+  scheme = "http"
+  token   = "{{ consul_agent_acl_token }}"
+}
+
+seal "azurekeyvault" {
+  client_id     = "{{ vault_unseal_client_id }}"
+  client_secret = "{{ vault_unseal_client_secret }}" # https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationMenuBlade/~/Credentials/appId/280d3758-d450-449d-8919-09cde5ee1ab3/isMSAApp~/false
+  tenant_id     = "{{ vault_unseal_tenant_id }}"
+  vault_name    = "home-key-vault"
+  key_name      = "hashicorp-vault-unseal"
+}
