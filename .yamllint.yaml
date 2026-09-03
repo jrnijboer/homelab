@@ -1,0 +1,24 @@
+# Yamllint rules: https://yamllint.readthedocs.io/en/latest/rules.html#
+extends: default
+
+rules:
+  commas:
+    # allow "unlimited" spaces after a comma, so we can align properties
+    max-spaces-after: -1
+
+  comments:
+    min-spaces-from-content: 1
+
+  # we don't want to force a document start marker
+  document-start: disable
+
+  # yaml allows any indentation, but we want to standardize on two spaces
+  indentation:
+    spaces: 2
+
+  # disable line length, but use your healthy farmer brain
+  line-length: disable
+
+  # define valid boolean values
+  truthy:
+    allowed-values: ['true', 'false', 'yes', 'no']

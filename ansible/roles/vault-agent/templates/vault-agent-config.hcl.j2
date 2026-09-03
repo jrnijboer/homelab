@@ -1,0 +1,22 @@
+{% for cert in vault_agent_certificates -%}
+
+template {
+  source      = "/etc/vault-agent.d/templates/{{ cert.name }}.cert.tpl"
+  destination = "/etc/{{ cert.product }}.d/tls/{{ cert.name }}-cert.pem"
+  exec {
+    command = [
+{% for cmd_part in cert.command.split() %}       "{{ cmd_part }}"{{ "," if not loop.last else "" }}
+{% endfor %}    ]
+  }
+}
+
+template {
+  source      = "/etc/vault-agent.d/templates/{{ cert.name }}.key.tpl"
+  destination = "/etc/{{ cert.product }}.d/tls/{{ cert.name }}-key.pem"
+  exec {
+    command = [
+{% for cmd_part in cert.command.split() %}       "{{ cmd_part }}"{{ "," if not loop.last else "" }}
+{% endfor %}    ]
+  }
+}
+{% endfor %}

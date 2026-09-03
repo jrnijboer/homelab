@@ -1,0 +1,4 @@
+{% raw %}{{ with secret "pki-intermediate/issue/{% endraw %}{{ item.cert_request }}{% raw %}" "ttl=24h" "common_name={% endraw %}{{ item.common_name }}{% raw %}" "ip_sans={% endraw %}{{ item.ip_sans }}{% raw %}" "alt_names={% endraw %}{{ item.alt_names }}{% raw %}" }}
+{{ .Data.certificate }}
+{{ .Data.issuing_ca }}
+{{ end }}{% endraw %}

@@ -1,0 +1,37 @@
+---
+- name: Install HashiCorp Consul
+  hosts: consul_servers
+  become: true
+  gather_facts: true
+
+  roles:
+    - role: general
+      tags:
+        - general
+    - hashicorp-repo
+    - role: vault-agent
+      tags:
+        - vault-agent
+      vars:
+        marker_name: consul-server
+        vault_agent_certificates:
+          - name: consul-server
+            cert_request: consul_cert_request
+            common_name: server.dc1.consul
+            ip_sans: 127.0.0.1
+            alt_names: consul.home,localhost
+            command: systemctl reload consul
+            product: consul
+          - name: consul-client
+            cert_request: consul_cert_request
+            common_name: client.dc1.consul
+            ip_sans: 127.0.0.1
+            alt_names: consul.home,localhost
+            command: systemctl reload consul
+            product: consul
+    - role: consul
+      tags:
+        - consul
+    - role: consul-server
+      tags:
+        - consul-server

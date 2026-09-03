@@ -1,0 +1,32 @@
+---
+- name: Install HashiCorp Nomad
+  hosts: nomad_servers
+  become: true
+  gather_facts: true
+
+  roles:
+    - role: general
+      tags:
+        - general
+    - hashicorp-repo
+    - role: vault-agent
+      tags:
+        - vault-agent
+      vars:
+        marker_name: nomad-server
+        vault_agent_certificates:
+          - name: nomad-server
+            cert_request: nomad_cert_request
+            common_name: server.global.nomad
+            ip_sans: 127.0.0.1,{{ ansible_facts['default_ipv4']['address'] }}
+            alt_names: nomad.home,localhost
+            command: systemctl reload nomad
+            product: nomad
+
+    - role: nomad
+      tags:
+        - nomad
+
+    - role: nomad-server
+      tags:
+        - nomad-server

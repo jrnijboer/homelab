@@ -1,0 +1,26 @@
+---
+- name: Create the Nomad configuration directory
+  ansible.builtin.file:
+    path: /etc/nomad.d
+    state: directory
+    owner: nomad
+    group: nomad
+    mode: '0750'
+
+- name: Create the Nomad log directory
+  ansible.builtin.file:
+    path: /var/log/nomad
+    state: directory
+    owner: nomad
+    group: nomad
+    mode: '0750'
+
+- name: Install the Nomad server configuration
+  ansible.builtin.template:
+    src: nomad.hcl.j2
+    dest: /etc/nomad.d/nomad.hcl
+    owner: nomad
+    group: nomad
+    mode: '0640'
+  diff: false
+  notify: Restart Nomad

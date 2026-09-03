@@ -1,0 +1,13 @@
+---
+- name: Restart Vault Agent
+  ansible.builtin.systemd_service:
+    name: vault-agent
+    enabled: true
+    state: restarted
+    daemon_reload: true
+
+- name: Reload Consul
+  ansible.builtin.systemd_service:
+    name: consul
+    state: reloaded
+  when: marker_name == 'consul-server'

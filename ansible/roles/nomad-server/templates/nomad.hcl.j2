@@ -1,0 +1,50 @@
+data_dir  = "/opt/nomad/data"
+bind_addr = "0.0.0.0"
+log_file = "/var/log/nomad/nomad.log"
+log_rotate_duration = "24h"
+log_rotate_max_files = 14
+
+server {
+  enabled    = true
+  encrypt    = "{{ nomad_gossip_key }}"
+  retry_join = ["192.168.179.100", "192.168.179.97", "192.168.179.99"]
+}
+
+tls {
+  http = true
+  rpc  = true
+
+  ca_file = "/etc/ca/nijboer.home.root.pem"
+  cert_file = "/etc/nomad.d/tls/nomad-server-cert.pem"
+  key_file  = "/etc/nomad.d/tls/nomad-server-key.pem"
+
+  tls_min_version = "tls12"
+
+  verify_server_hostname = true
+  verify_https_client    = true
+}
+
+consul {
+  address = "127.0.0.1:8500"
+  ssl = false
+  token = "{{ consul_agent_acl_token }}"
+}
+
+client {
+  enabled = false
+}
+
+acl {
+  enabled = true
+}
+
+vault {
+  enabled = true
+  address = "https://vault.home:8200"
+  ca_file = "/etc/ca/nijboer.home.root.pem"
+
+  default_identity {
+    aud = ["vault.io"]
+    ttl = "1h"
+  }
+}

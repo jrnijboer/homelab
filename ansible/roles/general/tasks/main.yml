@@ -1,0 +1,43 @@
+---
+- name: Install general packages
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - ufw
+    state: present
+
+- name: Allow SSH traffic through UFW
+  community.general.ufw:
+    rule: allow
+    direction: in
+    name: OpenSSH
+
+- name: Enable UFW
+  community.general.ufw:
+    state: enabled
+
+- name: Create the CA directory
+  ansible.builtin.file:
+    path: /etc/ca
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Install the nijboer.home root CA certificate
+  ansible.builtin.copy:
+    src: nijboer.home.root.pem
+    dest: /etc/ca/nijboer.home.root.pem
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Add the nijboer.home root CA certificate to the system trust store
+  ansible.builtin.copy:
+    src: /etc/ca/nijboer.home.root.pem
+    dest: /usr/local/share/ca-certificates/nijboer.home.root.crt
+    owner: root
+    group: root
+    mode: '0644'
+    remote_src: true
+  notify: Update trusted CA certificates

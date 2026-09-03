@@ -1,0 +1,138 @@
+---
+- name: Install Vault
+  ansible.builtin.apt:
+    name: vault
+    state: present
+    update_cache: true
+    policy_rc_d: 101
+
+- name: Create the Vault Agent configuration directory
+  ansible.builtin.file:
+    path: /etc/vault-agent.d
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Install the Vault Agent role ID
+  ansible.builtin.template:
+    src: roleid.j2
+    dest: /etc/vault-agent.d/roleid
+    owner: root
+    group: root
+    mode: '0600'
+  no_log: true
+  notify: Restart Vault Agent
+
+- name: Install the Vault Agent secret ID
+  ansible.builtin.template:
+    src: secretid.j2
+    dest: /etc/vault-agent.d/secretid
+    owner: root
+    group: root
+    mode: '0600'
+  no_log: true
+  notify: Restart Vault Agent
+
+- name: Install the Vault Agent systemd service
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/vault-agent.service
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      [Unit]
+      Description="HashiCorp Vault Agent - Generating certs with templates"
+      Documentation=https://developer.hashicorp.com/vault/docs
+      Requires=network-online.target
+      After=network-online.target
+      ConditionFileNotEmpty=/etc/vault-agent.d/vault-agent-config.hcl
+      StartLimitIntervalSec=60
+      StartLimitBurst=3
+
+      [Service]
+      Type=notify
+      User=root
+      Group=root
+      ExecStart=/usr/bin/vault agent -config=/etc/vault-agent.d/vault-agent-config.hcl
+      ExecReload=/bin/kill --signal HUP $MAINPID
+      KillMode=process
+      KillSignal=SIGINT
+      Restart=on-failure
+      RestartSec=5
+      TimeoutStopSec=30
+      LimitNOFILE=65536
+      LimitMEMLOCK=infinity
+      LimitCORE=0
+
+      [Install]
+      WantedBy=multi-user.target
+  notify: Restart Vault Agent
+
+- name: Create the Vault Agent templates directory
+  ansible.builtin.file:
+    path: /etc/vault-agent.d/templates
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Install Vault Agent certificate templates
+  ansible.builtin.template:
+    src: cert.tpl.j2
+    dest: "/etc/vault-agent.d/templates/{{ item.name }}.cert.tpl"
+    owner: root
+    group: root
+    mode: '0644'
+  loop: "{{ vault_agent_certificates }}"
+  notify: Restart Vault Agent
+
+- name: Install Vault Agent key templates
+  ansible.builtin.template:
+    src: key.tpl.j2
+    dest: "/etc/vault-agent.d/templates/{{ item.name }}.key.tpl"
+    owner: root
+    group: root
+    mode: '0644'
+  loop: "{{ vault_agent_certificates }}"
+  notify: Restart Vault Agent
+
+- name: Install the base Vault Agent configuration
+  ansible.builtin.copy:
+    src: vault-agent-config-base.hcl
+    dest: /etc/vault-agent.d/vault-agent-config.hcl
+    owner: root
+    group: root
+    mode: '0600'
+    force: no
+  notify: Restart Vault Agent
+
+- name: Validate the Vault Agent marker name
+  ansible.builtin.assert:
+    that:
+      - marker_name is defined
+      - marker_name | length > 0
+      - marker_name is match('^[A-Za-z0-9._-]+$')
+    fail_msg: >-
+      Set marker_name to a non-empty identifier containing only letters,
+      numbers, dots, underscores, or hyphens.
+
+- name: Manage Vault Agent template blocks
+  ansible.builtin.blockinfile:
+    path: /etc/vault-agent.d/vault-agent-config.hcl
+    block: "{{ lookup('template', 'vault-agent-config.hcl.j2') }}"
+    marker: "# {mark} ANSIBLE MANAGED VAULT AGENT TEMPLATES for {{ marker_name }}"
+    owner: root
+    group: root
+    mode: '0600'
+  no_log: true
+  notify:
+    - Restart Vault Agent
+    - Reload Consul
+
+- name: Enable and start Vault Agent
+  ansible.builtin.systemd_service:
+    name: vault-agent
+    enabled: true
+    state: started
+    daemon_reload: true
