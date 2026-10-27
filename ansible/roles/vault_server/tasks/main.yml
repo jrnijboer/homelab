@@ -1,4 +1,16 @@
 ---
+- name: Allow Vault TCP ports through UFW
+  community.general.ufw:
+    rule: allow
+    direction: in
+    port: "{{ item }}"
+    proto: tcp
+  loop:
+    - 8200
+    - 8201
+  tags:
+    - firewall
+
 - name: Create the Vault configuration directory
   ansible.builtin.file:
     path: /etc/vault.d

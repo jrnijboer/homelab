@@ -11,13 +11,3 @@
     name: vault
     state: stopped
     enabled: false
-
-- name: Allow Vault TCP ports through UFW
-  community.general.ufw:
-    rule: allow
-    direction: in
-    port: "{{ item }}"
-    proto: tcp
-  loop:
-    - 8200
-    - 8201
