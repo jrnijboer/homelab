@@ -32,3 +32,9 @@
     mode: '0640'
   diff: false
   notify: Restart Consul
+
+- name: Enable and start Consul server
+  ansible.builtin.systemd_service:
+    name: consul
+    state: started
+    enabled: true

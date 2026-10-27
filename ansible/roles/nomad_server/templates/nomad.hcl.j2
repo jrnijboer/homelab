@@ -31,7 +31,58 @@ consul {
 }
 
 client {
-  enabled = false
+  enabled = {{ nomad_server_client_enabled | bool | ternary('true', 'false') }}
+{% if inventory_hostname == 'rey' and (nomad_server_client_enabled | bool) %}
+  host_volume "vault-volume" {
+    path      = "/var/nomad-volumes/vault-volume"
+    read_only = false
+  }
+
+  host_volume "homeassistant-volume" {
+    path      = "/var/nomad-volumes/homeassistant-volume"
+    read_only = false
+  }
+
+  host_volume "pihole-etc-volume" {
+    path      = "/var/nomad-volumes/pi-hole/etc-pihole"
+    read_only = false
+  }
+
+  host_volume "pihole-dnsmasq-volume" {
+    path      = "/var/nomad-volumes/pi-hole/etc-dnsmasq.d"
+    read_only = false
+  }
+
+  host_volume "mariadb-data-volume" {
+    path      = "/var/nomad-volumes/mariadb"
+    read_only = false
+  }
+
+  host_volume "mqtt-volume" {
+    path      = "/var/nomad-volumes/mqtt-volume"
+    read_only = false
+  }
+
+  host_volume "traefik-volume" {
+    path      = "/var/nomad-volumes/traefik-volume"
+    read_only = false
+  }
+
+  host_volume "certbot-volume" {
+    path      = "/var/nomad-volumes/certbot-volume"
+    read_only = false
+  }
+
+  host_volume "mysql" {
+    path      = "/var/nomad-volumes/mysql-volume"
+    read_only = false
+  }
+
+  host_volume "wordpress" {
+    path      = "/var/nomad-volumes/wordpress-volume"
+    read_only = false
+  }
+{% endif %}
 }
 
 acl {
