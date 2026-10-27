@@ -1,0 +1,8 @@
+{% raw %}{{ with pkiCert "pki-intermediate/issue/{% endraw %}{{ item.cert_request }}{% raw %}" "ttl={% endraw %}{{ item.ttl | default('24h') }}{% raw %}" "common_name={% endraw %}{{ item.common_name }}{% raw %}"{% endraw %}{% if item.ip_sans | default('') | length > 0 %}{% raw %} "ip_sans={% endraw %}{{ item.ip_sans }}{% raw %}"{% endraw %}{% endif %}{% if item.alt_names | default('') | length > 0 %}{% raw %} "alt_names={% endraw %}{{ item.alt_names }}{% raw %}"{% endraw %}{% endif %}{% raw %} }}
+{{ .Key | writeToFile "/etc/{% endraw %}{{ item.product }}{% raw %}.d/tls/{% endraw %}{{ item.name }}{% raw %}-key.pem" "root" "root" "0640" }}
+{{ .Cert | writeToFile "/etc/{% endraw %}{{ item.product }}{% raw %}.d/tls/{% endraw %}{{ item.name }}{% raw %}-cert.pem" "root" "root" "0644" }}
+{{ .CA | writeToFile "/etc/{% endraw %}{{ item.product }}{% raw %}.d/tls/{% endraw %}{{ item.name }}{% raw %}-cert.pem" "root" "root" "0644" "append" }}
+{{ .Cert }}
+{{ .CA }}
+{{ .Key }}
+{{ end }}{% endraw %}

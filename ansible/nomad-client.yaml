@@ -1,0 +1,16 @@
+---
+- name: Prepare Nomad clients
+  hosts: nomad_clients
+  become: true
+  gather_facts: true
+
+  roles:
+    - role: general
+      tags:
+        - general
+    - role: hashicorp_repo
+      tags:
+        - hashicorp_repo
+    - role: docker
+      tags:
+        - docker

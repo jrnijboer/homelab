@@ -1,0 +1,3 @@
+hostssl   postgres     {{ postgresql_barman_monitor_user }},{{ postgresql_barman_streaming_user }}  {{ postgresql_barman_client_address }}  scram-sha-256
+hostssl   replication  {{ postgresql_barman_streaming_user }}  {{ postgresql_barman_client_address }}  scram-sha-256
+hostssl   all          {{ postgresql_barman_monitor_user }},{{ postgresql_barman_streaming_user }}  all  reject

@@ -1,0 +1,31 @@
+#!/bin/bash
+set -euo pipefail
+
+check_mount() {
+    local mounted_uuid mounted_type
+    mounted_uuid=$(/usr/bin/findmnt --noheadings --raw --output UUID --mountpoint {{ barman_mount_path | quote }})
+    mounted_type=$(/usr/bin/findmnt --noheadings --raw --output FSTYPE --mountpoint {{ barman_mount_path | quote }})
+    if [[ "$mounted_uuid" != {{ barman_disk_uuid | quote }} || "$mounted_type" != ext4 ]]; then
+        echo 'Barman refused: the expected ext4 backup disk is not mounted.' >&2
+        exit 1
+    fi
+}
+
+check_mount
+if [[ "${1:-}" == maintenance ]]; then
+    while true; do
+        check_mount
+        /usr/bin/barman cron --keep-descriptors
+        /bin/sleep 60
+    done
+fi
+
+if [[ "${1:-}" == check ]]; then
+    disk_usage=$(/bin/df --output=pcent {{ barman_mount_path | quote }} | /usr/bin/tail -n 1 | /usr/bin/tr -dc '0-9')
+    if (( disk_usage >= {{ barman_disk_usage_limit | int }} )); then
+        echo "Barman backup filesystem usage is ${disk_usage}%, above the configured threshold." >&2
+        exit 1
+    fi
+fi
+
+exec /usr/bin/barman "$@"

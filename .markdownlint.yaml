@@ -1,0 +1,7 @@
+# Markdownlint rules: https://github.com/markdownlint/markdownlint/blob/main/docs/RULES.md
+
+# disable line length, but use your healthy farmer brain
+MD013: false
+
+# allow multiple top-level headings
+MD025: false

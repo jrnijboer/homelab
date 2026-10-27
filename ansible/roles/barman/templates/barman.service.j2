@@ -1,0 +1,21 @@
+[Unit]
+Description=Barman {{ item.name }} for {{ barman_server_name }}
+Wants=network-online.target
+After=network-online.target {{ barman_mount_unit }}
+BindsTo={{ barman_mount_unit }}
+RequiresMountsFor={{ barman_mount_path }}
+
+[Service]
+Type={{ item.type }}
+User=barman
+Group=barman
+Environment=HOME=/var/lib/barman
+WorkingDirectory=/var/lib/barman
+UMask=0077
+ExecStart=/usr/local/bin/barman-guard {{ item.command }}
+KillMode=control-group
+TimeoutStartSec={{ item.timeout }}
+TimeoutStopSec=60
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true

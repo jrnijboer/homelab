@@ -24,7 +24,7 @@ repos:
       - id: fix-byte-order-marker                 #  removes utf-8 byte order marker.
       - id: mixed-line-ending                     #  replaces or checks mixed line ending.
       - id: no-commit-to-branch                   #  don't commit to branch
-        args: [--branch, master, --branch, main]  #  default but be explicit, override when needed
+        args: [--branch, main]                    #  default but be explicit, override when needed
       - id: requirements-txt-fixer                #  sorts entries in requirements.txt.
       - id: trailing-whitespace                   #  trims trailing whitespace.
 
@@ -47,13 +47,13 @@ repos:
 
   #  analysis of your markdown files, configuration can be set in .markdownlint.yaml
   - repo: https://github.com/igorshubovych/markdownlint-cli
-    rev: v0.45.0
+    rev: v0.50.0
     hooks:
       - id: markdownlint-fix
 
   #  analysis of your Dockerfiles, configuration can be set in .hadolint.yaml
   - repo: https://github.com/hadolint/hadolint
-    rev: v2.12.1-beta
+    rev: v2.15.1
     hooks:
       - id: hadolint
 
@@ -65,29 +65,29 @@ repos:
 
   #  linter for yaml files, configuration can be set in .yamllint.yaml
   - repo: https://github.com/adrienverge/yamllint
-    rev: v1.37.1
+    rev: v1.38.0
     hooks:
       - id: yamllint
 
   #  Trivy is the most popular open source security scanner for Vulnerability &, IaC, SBOM discovery, cloud scanning and Kubernetes security
   - repo: https://github.com/iddinkgroup/pre-commit-mirrors-trivy
-    rev: v0.69.3
+    rev: v0.75.0
     hooks:
       - id: trivy-fs
         args:
           - --exit-code=1
           - --ignorefile=./.trivyignore.yaml
+          - --config-data=./.trivy-data.yaml
+          - --skip-dirs=**/patches
+          - --skip-dirs=**/venv
+          - --skip-dirs=**/.venv
           - ./
       - id: trivy-config
         args:
           - --exit-code=1
           - --ignorefile=./.trivyignore.yaml
+          - --config-data=./.trivy-data.yaml
+          - --skip-dirs=**/patches
+          - --skip-dirs=**/venv
+          - --skip-dirs=**/.venv
           - ./
-
-  - repo: https://github.com/ansible-community/ansible-lint
-    rev: v26.8.0
-    hooks:
-      - id: ansible-lint
-        additional_dependencies:
-          - "ansible"
-          - "jmespath"

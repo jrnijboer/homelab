@@ -85,6 +85,7 @@
     group: root
     mode: '0644'
   loop: "{{ vault_agent_certificates }}"
+  when: not (item.paired | default(false) | bool)
   notify: Restart Vault Agent
 
 - name: Install Vault Agent key templates
@@ -95,6 +96,28 @@
     group: root
     mode: '0644'
   loop: "{{ vault_agent_certificates }}"
+  when: not (item.paired | default(false) | bool)
+  notify: Restart Vault Agent
+
+- name: Create paired certificate output directories
+  ansible.builtin.file:
+    path: "/etc/{{ item.product }}.d/tls"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  loop: "{{ vault_agent_certificates }}"
+  when: item.paired | default(false) | bool
+
+- name: Install Vault Agent paired certificate templates
+  ansible.builtin.template:
+    src: paired.tpl.j2
+    dest: "/etc/vault-agent.d/templates/{{ item.name }}.paired.tpl"
+    owner: root
+    group: root
+    mode: '0644'
+  loop: "{{ vault_agent_certificates }}"
+  when: item.paired | default(false) | bool
   notify: Restart Vault Agent
 
 - name: Install the base Vault Agent configuration

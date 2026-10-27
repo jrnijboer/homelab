@@ -1,0 +1,201 @@
+---
+- name: Verify the repository host and storage settings
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['distribution'] in ['Ubuntu', 'Debian']
+      - barman_repository.startswith(barman_mount_path + '/')
+      - barman_server_name is match('^[a-z][a-z0-9_]*$')
+      - barman_disk_usage_limit | int > 0
+      - barman_disk_usage_limit | int < 100
+    fail_msg: Barman requires Ubuntu or Debian and a repository below the backup mount.
+
+- name: Verify credentials are supplied before enabling backups
+  ansible.builtin.assert:
+    that:
+      - barman_postgresql_password | default('') | length > 0
+      - barman_streaming_password | default('') | length > 0
+    fail_msg: Set dedicated Barman database passwords in Ansible Vault before enabling backups.
+  when: barman_enabled | bool
+  no_log: true
+
+- name: Check whether the packaged Barman cron job is diverted
+  ansible.builtin.command: dpkg-divert --list /etc/cron.d/barman
+  register: barman_cron_diversion
+  changed_when: false
+  check_mode: false
+
+- name: Divert the packaged cron job before installing Barman
+  ansible.builtin.command:
+    argv:
+      - dpkg-divert
+      - --add
+      - --rename
+      - --divert
+      - /etc/cron.d/barman.distrib
+      - /etc/cron.d/barman
+  when: barman_cron_diversion.stdout | length == 0
+  changed_when: true
+
+- name: Install the required packages
+  ansible.builtin.apt:
+    name: "{{ barman_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+    install_recommends: false
+
+- name: Check the mounted backup filesystem
+  ansible.builtin.command:
+    argv:
+      - findmnt
+      - --noheadings
+      - --raw
+      - --output
+      - UUID,FSTYPE
+      - --mountpoint
+      - "{{ barman_mount_path }}"
+  register: barman_backup_mount
+  changed_when: false
+  check_mode: false
+
+- name: Verify the expected USB disk is mounted as ext4
+  ansible.builtin.assert:
+    that:
+      - barman_backup_mount.stdout.split() == [barman_disk_uuid, 'ext4']
+    fail_msg: The expected ext4 USB disk must be mounted before preparing the repository.
+
+- name: Read the installed Barman version
+  ansible.builtin.command: barman --version
+  register: barman_version
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Require a Barman version supporting PostgreSQL 18
+  ansible.builtin.assert:
+    that:
+      - (barman_version.stdout | regex_search('[0-9]+\.[0-9]+\.[0-9]+')) is version('3.16.0', '>=')
+    fail_msg: Barman 3.16 or newer is required; check the configured package repository.
+  when: not ansible_check_mode
+
+- name: Ensure the dedicated Barman account exists
+  ansible.builtin.user:
+    name: barman
+    home: /var/lib/barman
+    system: true
+    create_home: true
+    shell: /bin/bash
+
+- name: Create Barman directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: barman
+    group: barman
+    mode: '0700'
+  loop:
+    - /var/lib/barman
+    - /var/lib/barman/locks
+    - /var/log/barman
+    - "{{ barman_repository }}"
+    - "{{ barman_repository }}/staging"
+
+- name: Create the Barman configuration directory
+  ansible.builtin.file:
+    path: /etc/barman.d
+    state: directory
+    owner: root
+    group: barman
+    mode: '0750'
+
+- name: Install Barman configuration and mount guard
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: root
+    group: barman
+    mode: "{{ item.mode }}"
+  loop:
+    - src: barman.conf.j2
+      dest: /etc/barman.conf
+      mode: '0640'
+    - src: server.conf.j2
+      dest: "/etc/barman.d/{{ barman_server_name }}.conf"
+      mode: '0640'
+    - src: barman-guard.j2
+      dest: /usr/local/bin/barman-guard
+      mode: '0750'
+  notify: Restart Barman maintenance
+
+- name: Install dedicated database credentials
+  ansible.builtin.template:
+    src: pgpass.j2
+    dest: /var/lib/barman/.pgpass
+    owner: barman
+    group: barman
+    mode: '0600'
+  no_log: true
+  notify: Restart Barman maintenance
+
+- name: Install guarded systemd services
+  ansible.builtin.template:
+    src: barman.service.j2
+    dest: "/etc/systemd/system/barman-{{ item.name }}.service"
+    owner: root
+    group: root
+    mode: '0644'
+  loop:
+    - name: maintenance
+      type: simple
+      command: maintenance
+      timeout: '90'
+    - name: backup
+      type: oneshot
+      command: "backup --wait --wait-timeout 3600 {{ barman_server_name }}"
+      timeout: infinity
+    - name: check
+      type: oneshot
+      command: "check {{ barman_server_name }}"
+      timeout: '120'
+  register: barman_service_units
+  notify: Restart Barman maintenance
+
+- name: Install backup and monitoring timers
+  ansible.builtin.template:
+    src: barman.timer.j2
+    dest: "/etc/systemd/system/barman-{{ item.name }}.timer"
+    owner: root
+    group: root
+    mode: '0644'
+  loop:
+    - name: maintenance
+      calendar: '*-*-* *:*:00'
+    - name: backup
+      calendar: "{{ barman_backup_calendar }}"
+    - name: check
+      calendar: '*-*-* *:0/15:00'
+  register: barman_timer_units
+
+- name: Reload systemd when units change
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  when: barman_service_units is changed or barman_timer_units is changed
+
+- name: Enable or disable Barman timers
+  ansible.builtin.systemd_service:
+    name: "barman-{{ item }}.timer"
+    enabled: "{{ barman_enabled | bool }}"
+    state: "{{ (barman_enabled | bool) | ternary('started', 'stopped') }}"
+  loop:
+    - maintenance
+    - backup
+    - check
+
+- name: Stop Barman operations when automation is disabled
+  ansible.builtin.systemd_service:
+    name: "barman-{{ item }}.service"
+    state: stopped
+  loop:
+    - maintenance
+    - backup
+    - check
+  when: not (barman_enabled | bool)

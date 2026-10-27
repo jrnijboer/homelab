@@ -1,0 +1,20 @@
+#!/bin/bash
+set -euo pipefail
+
+certificate={{ (postgresql_tls_directory + '/postgresql-server-cert.pem') | quote }}
+private_key={{ (postgresql_tls_directory + '/postgresql-server-key.pem') | quote }}
+
+test -s "$certificate"
+test -s "$private_key"
+openssl x509 -in "$certificate" -checkend 0 -noout
+diff <(openssl x509 -in "$certificate" -pubkey -noout) <(openssl pkey -in "$private_key" -pubout)
+chown root:{{ postgresql_image_group.stdout | trim }} "$private_key"
+chmod 0640 "$private_key"
+chmod 0644 "$certificate"
+
+if docker container inspect {{ postgresql_container_name | quote }} >/dev/null 2>&1; then
+    running=$(docker container inspect --format '{% raw %}{{.State.Running}}{% endraw %}' {{ postgresql_container_name | quote }})
+    if [[ "$running" == true ]]; then
+        docker kill --signal=HUP {{ postgresql_container_name | quote }} >/dev/null
+    fi
+fi

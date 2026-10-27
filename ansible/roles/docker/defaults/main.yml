@@ -1,0 +1,9 @@
+---
+docker_log_max_size: 10m
+docker_log_max_file: "5"
+docker_daemon_log_config:
+  log-driver: json-file
+  log-opts:
+    max-size: "{{ docker_log_max_size }}"
+    max-file: "{{ docker_log_max_file }}"
+docker_restart_on_config_change: false

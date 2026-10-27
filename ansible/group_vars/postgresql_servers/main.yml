@@ -1,0 +1,5 @@
+---
+postgresql_container_name: postgresql
+postgresql_config_directory: /etc/postgresql.d/config
+postgresql_admin_user: postgres
+postgresql_database: postgres

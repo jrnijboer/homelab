@@ -5,6 +5,23 @@
       - ansible_facts['distribution'] == 'Ubuntu'
     fail_msg: This role supports Ubuntu hosts only.
 
+- name: Find legacy APT source list files
+  ansible.builtin.find:
+    paths: /etc/apt
+    patterns: '*.list'
+    recurse: true
+    file_type: file
+  register: hashicorp_legacy_source_lists
+
+- name: Remove legacy HashiCorp entries superseded by the managed repository
+  ansible.builtin.lineinfile:
+    path: "{{ item.path }}"
+    regexp: '^\s*deb(?:-src)?\s+.*https?://apt\.releases\.hashicorp\.com(?:/|\s)'
+    state: absent
+  loop: "{{ hashicorp_legacy_source_lists.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+
 - name: Install APT repository prerequisites
   ansible.builtin.apt:
     name:

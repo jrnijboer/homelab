@@ -1,4 +1,15 @@
 {% for cert in vault_agent_certificates -%}
+{% if cert.paired | default(false) | bool %}
+
+template {
+  source      = "/etc/vault-agent.d/templates/{{ cert.name }}.paired.tpl"
+  destination = "{{ cert.cache_path | default('/etc/' ~ cert.product ~ '.d/tls/' ~ cert.name ~ '-rendered.pem') }}"
+  perms       = "0600"
+  exec {
+    command = {{ cert.command.split() | to_json }}
+  }
+}
+{% else %}
 
 template {
   source      = "/etc/vault-agent.d/templates/{{ cert.name }}.cert.tpl"
@@ -19,4 +30,5 @@ template {
 {% endfor %}    ]
   }
 }
+{% endif %}
 {% endfor %}

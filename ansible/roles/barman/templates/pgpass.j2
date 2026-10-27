@@ -1,0 +1,4 @@
+{% if barman_postgresql_password is defined and barman_streaming_password is defined %}
+{{ barman_postgresql_host }}:{{ barman_postgresql_port }}:postgres:{{ barman_postgresql_user }}:{{ barman_postgresql_password | replace('\\', '\\\\') | replace(':', '\\:') }}
+{{ barman_postgresql_host }}:{{ barman_postgresql_port }}:replication:{{ barman_streaming_user }}:{{ barman_streaming_password | replace('\\', '\\\\') | replace(':', '\\:') }}
+{% endif %}

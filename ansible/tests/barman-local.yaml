@@ -1,0 +1,135 @@
+---
+- name: Validate Barman templates without contacting managed hosts
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - ../roles/barman/defaults/main.yml
+  vars:
+    barman_template_directory: "{{ playbook_dir }}/../roles/barman/templates"
+    barman_postgresql_password: 'test:password\suffix'
+    barman_streaming_password: 'stream:password\suffix'
+    barman_expected_escaped_password: 'test\:password\\suffix'
+
+  tasks:
+    - name: Create a temporary validation directory
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: barman-local-
+      register: barman_test_directory
+
+    - name: Validate rendered files
+      block:
+        - name: Render configuration and scripts with test credentials
+          ansible.builtin.template:
+            src: "{{ barman_template_directory }}/{{ item }}.j2"
+            dest: "{{ barman_test_directory.path }}/{{ item }}"
+            mode: '0600'
+          loop:
+            - barman.conf
+            - server.conf
+            - pgpass
+            - barman-guard
+
+        - name: Verify shell syntax
+          ansible.builtin.command:
+            argv:
+              - /bin/bash
+              - -n
+              - "{{ barman_test_directory.path }}/barman-guard"
+          changed_when: false
+
+        - name: Verify inactive staging and escaped password fields
+          ansible.builtin.assert:
+            that:
+              - "'active = false' in lookup('ansible.builtin.file', barman_test_directory.path + '/server.conf')"
+              - "'backup_method = postgres' in lookup('ansible.builtin.file', barman_test_directory.path + '/server.conf')"
+              - barman_expected_escaped_password in lookup('ansible.builtin.file', barman_test_directory.path + '/pgpass')
+              - "':replication:streaming_barman:' in lookup('ansible.builtin.file', barman_test_directory.path + '/pgpass')"
+
+        - name: Render an active server configuration
+          ansible.builtin.template:
+            src: "{{ barman_template_directory }}/server.conf.j2"
+            dest: "{{ barman_test_directory.path }}/active.conf"
+            mode: '0600'
+          vars:
+            barman_enabled: true
+
+        - name: Verify the activation flag renders correctly
+          ansible.builtin.assert:
+            that:
+              - "'active = true' in lookup('ansible.builtin.file', barman_test_directory.path + '/active.conf')"
+
+        - name: Render services
+          ansible.builtin.template:
+            src: "{{ barman_template_directory }}/barman.service.j2"
+            dest: "{{ barman_test_directory.path }}/barman-{{ item.name }}.service"
+            mode: '0600'
+          loop:
+            - name: maintenance
+              type: simple
+              command: maintenance
+              timeout: '90'
+            - name: backup
+              type: oneshot
+              command: backup --wait --wait-timeout 3600 ig11
+              timeout: infinity
+            - name: check
+              type: oneshot
+              command: check ig11
+              timeout: '120'
+
+        - name: Render timers
+          ansible.builtin.template:
+            src: "{{ barman_template_directory }}/barman.timer.j2"
+            dest: "{{ barman_test_directory.path }}/barman-{{ item.name }}.timer"
+            mode: '0600'
+          loop:
+            - name: maintenance
+              calendar: '*-*-* *:*:00'
+            - name: backup
+              calendar: "{{ barman_backup_calendar }}"
+            - name: check
+              calendar: '*-*-* *:0/15:00'
+
+        - name: Validate timer calendar expressions
+          ansible.builtin.command:
+            argv:
+              - systemd-analyze
+              - calendar
+              - "{{ item }}"
+          loop:
+            - '*-*-* *:*:00'
+            - "{{ barman_backup_calendar }}"
+            - '*-*-* *:0/15:00'
+          changed_when: false
+
+        - name: Render a guard pointed at the wrong filesystem
+          ansible.builtin.template:
+            src: "{{ barman_template_directory }}/barman-guard.j2"
+            dest: "{{ barman_test_directory.path }}/wrong-disk-guard"
+            mode: '0600'
+          vars:
+            barman_mount_path: /
+
+        - name: Attempt a command with the wrong backup filesystem
+          ansible.builtin.command:
+            argv:
+              - /bin/bash
+              - "{{ barman_test_directory.path }}/wrong-disk-guard"
+              - list-servers
+          register: barman_guard_rejection
+          failed_when: false
+          changed_when: false
+
+        - name: Verify the guard rejects the disk before invoking Barman
+          ansible.builtin.assert:
+            that:
+              - barman_guard_rejection.rc == 1
+              - "'expected ext4 backup disk is not mounted' in barman_guard_rejection.stderr"
+
+      always:
+        - name: Remove temporary validation files
+          ansible.builtin.file:
+            path: "{{ barman_test_directory.path }}"
+            state: absent

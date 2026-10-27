@@ -1,0 +1,6 @@
+---
+- name: Restart Barman maintenance
+  ansible.builtin.systemd_service:
+    name: barman-maintenance.service
+    state: restarted
+  when: barman_enabled | bool

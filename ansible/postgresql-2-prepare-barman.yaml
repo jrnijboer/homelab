@@ -1,0 +1,104 @@
+---
+- name: Prepare PostgreSQL for Barman backups
+  hosts: postgresql_servers
+  become: true
+  gather_facts: false
+
+  vars:
+    # Account names must match barman_postgresql_user and barman_streaming_user in roles/barman.
+    postgresql_barman_monitor_user: barman
+    postgresql_barman_streaming_user: streaming_barman
+    postgresql_barman_client_address: 192.168.179.0/24
+    postgresql_max_slot_wal_keep_size: 50GB
+
+  pre_tasks:
+    - name: Verify the Barman account settings
+      ansible.builtin.assert:
+        that:
+          - barman_postgresql_password | default('') | length > 0
+          - barman_streaming_password | default('') | length > 0
+          - postgresql_barman_monitor_user is match('^[a-z][a-z0-9_]*$')
+          - postgresql_barman_streaming_user is match('^[a-z][a-z0-9_]*$')
+          - postgresql_barman_monitor_user != postgresql_barman_streaming_user
+        fail_msg: Set barman_postgresql_password and barman_streaming_password in Ansible Vault.
+      no_log: true
+
+  tasks:
+    - name: Wait for PostgreSQL to accept TCP connections
+      ansible.builtin.command:
+        argv:
+          - docker
+          - exec
+          - "{{ postgresql_container_name }}"
+          - pg_isready
+          - --host=127.0.0.1
+          - --quiet
+      register: postgresql_ready
+      until: postgresql_ready.rc == 0
+      retries: 30
+      delay: 2
+      changed_when: false
+      when: not ansible_check_mode
+
+    - name: Provision the Barman monitoring and replication accounts
+      ansible.builtin.command:
+        argv:
+          - docker
+          - exec
+          - --interactive
+          - "{{ postgresql_container_name }}"
+          - psql
+          - --username={{ postgresql_admin_user }}
+          - --dbname={{ postgresql_database }}
+          - --no-psqlrc
+          - --quiet
+          - --set=ON_ERROR_STOP=1
+        stdin: |
+          \set monitor_user '{{ postgresql_barman_monitor_user }}'
+          \set streaming_user '{{ postgresql_barman_streaming_user }}'
+          \set monitor_pw_b64 '{{ barman_postgresql_password | b64encode }}'
+          \set streaming_pw_b64 '{{ barman_streaming_password | b64encode }}'
+          SET password_encryption = 'scram-sha-256';
+
+          SELECT format('CREATE ROLE %I', :'monitor_user')
+            WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = :'monitor_user') \gexec
+          SELECT format('CREATE ROLE %I', :'streaming_user')
+            WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = :'streaming_user') \gexec
+
+          SELECT format('ALTER ROLE %I LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION PASSWORD %L',
+            :'monitor_user', convert_from(decode(:'monitor_pw_b64', 'base64'), 'UTF8')) \gexec
+          SELECT format('ALTER ROLE %I LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE REPLICATION PASSWORD %L',
+            :'streaming_user', convert_from(decode(:'streaming_pw_b64', 'base64'), 'UTF8')) \gexec
+
+          GRANT pg_monitor TO :"monitor_user";
+          GRANT EXECUTE ON FUNCTION pg_backup_start(text, boolean) TO :"monitor_user";
+          GRANT EXECUTE ON FUNCTION pg_backup_stop(boolean) TO :"monitor_user";
+          GRANT EXECUTE ON FUNCTION pg_switch_wal() TO :"monitor_user";
+          GRANT EXECUTE ON FUNCTION pg_create_restore_point(text) TO :"monitor_user";
+      changed_when: false
+      no_log: true
+      when: not ansible_check_mode
+
+    - name: Install the Barman PostgreSQL settings and access rules
+      ansible.builtin.template:
+        src: "{{ item.src }}"
+        dest: "{{ postgresql_config_directory }}/{{ item.dest }}"
+        owner: root
+        group: root
+        mode: '0644'
+      loop:
+        - src: postgresql-barman.conf.j2
+          dest: conf.d/barman.conf
+        - src: pg_hba-barman.conf.j2
+          dest: hba.d/barman.conf
+      register: postgresql_barman_configuration
+
+    - name: Reload PostgreSQL after Barman configuration changes
+      ansible.builtin.command:
+        argv:
+          - docker
+          - kill
+          - --signal=HUP
+          - "{{ postgresql_container_name }}"
+      when: postgresql_barman_configuration is changed
+      changed_when: true

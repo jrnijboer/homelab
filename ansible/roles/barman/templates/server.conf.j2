@@ -1,0 +1,19 @@
+[{{ barman_server_name }}]
+description = PostgreSQL 18 on ig11
+active = {{ (barman_enabled | bool) | ternary('true', 'false') }}
+conninfo = host={{ barman_postgresql_host }} port={{ barman_postgresql_port }} user={{ barman_postgresql_user }} dbname=postgres sslmode={{ barman_sslmode }} sslrootcert={{ barman_sslrootcert }} connect_timeout=10
+streaming_conninfo = host={{ barman_postgresql_host }} port={{ barman_postgresql_port }} user={{ barman_streaming_user }} dbname=postgres sslmode={{ barman_sslmode }} sslrootcert={{ barman_sslrootcert }} connect_timeout=10
+path_prefix = /usr/lib/postgresql/18/bin
+backup_directory = {{ barman_repository }}/{{ barman_server_name }}
+backup_method = postgres
+streaming_archiver = on
+archiver = off
+slot_name = {{ barman_slot_name }}
+create_slot = auto
+compression = gzip
+retention_policy = {{ barman_retention_policy }}
+minimum_redundancy = {{ barman_minimum_redundancy }}
+last_backup_maximum_age = {{ barman_last_backup_maximum_age }}
+last_wal_maximum_age = {{ barman_last_wal_maximum_age }}
+staging_path = {{ barman_repository }}/staging
+staging_location = local

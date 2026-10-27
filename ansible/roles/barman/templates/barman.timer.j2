@@ -1,0 +1,10 @@
+[Unit]
+Description=Schedule Barman {{ item.name }}
+
+[Timer]
+OnCalendar={{ item.calendar }}
+Persistent=true
+Unit=barman-{{ item.name }}.service
+
+[Install]
+WantedBy=timers.target

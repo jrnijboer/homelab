@@ -1,0 +1,17 @@
+include = '/etc/postgresql/postgresql.conf'
+
+ssl = on
+ssl_cert_file = '/etc/postgresql/tls/postgresql-server-cert.pem'
+ssl_key_file = '/etc/postgresql/tls/postgresql-server-key.pem'
+hba_file = '/etc/postgresql/custom/pg_hba.conf'
+
+shared_buffers = '2GB'
+effective_cache_size = '4GB'
+work_mem = '4MB'
+maintenance_work_mem = '256MB'
+autovacuum_work_mem = '128MB'
+
+max_connections = 100
+max_parallel_workers_per_gather = 2
+
+include_dir = '/etc/postgresql/custom/conf.d'

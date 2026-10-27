@@ -1,0 +1,10 @@
+---
+- name: Configure the PostgreSQL backup repository
+  hosts: monmothma
+  become: true
+  gather_facts: true
+
+  roles:
+    - role: barman
+      tags:
+        - barman

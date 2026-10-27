@@ -1,0 +1,266 @@
+---
+- name: Run PostgreSQL in Docker
+  hosts: postgresql_servers
+  become: true
+  gather_facts: true
+
+  vars:
+    postgresql_image: ghcr.io/immich-app/postgres:18-vectorchord0.5.3
+    postgresql_data_directory: /tank/postgres
+    postgresql_listen_address: 0.0.0.0
+    postgresql_port: 5432
+    postgresql_tls_directory: /etc/postgresql.d/tls
+    postgresql_container_memory: 6G
+    postgresql_zfs_arc_max: 3221225472
+
+  pre_tasks:
+    - name: Verify the dedicated PostgreSQL Vault AppRole credentials are configured
+      ansible.builtin.assert:
+        that:
+          - postgresql_vault_agent_role_id | default('') | length > 0
+          - postgresql_vault_agent_secret_id | default('') | length > 0
+        fail_msg: Configure the dedicated PostgreSQL AppRole credentials in Ansible Vault.
+      no_log: true
+
+  roles:
+    - role: general
+      tags:
+        - general
+    - role: docker
+      tags:
+        - docker
+    - role: hashicorp_repo
+      tags:
+        - hashicorp_repo
+
+  tasks:
+    - name: Verify the PostgreSQL administrator password is configured
+      ansible.builtin.assert:
+        that:
+          - postgresql_admin_password is defined
+          - postgresql_admin_password | default('') | string | length > 0
+        fail_msg: Set postgresql_admin_password in group_vars/all/vault.yaml.
+      no_log: true
+
+    - name: Allow PostgreSQL traffic through UFW
+      community.general.ufw:
+        rule: allow
+        direction: in
+        port: "{{ postgresql_port | string }}"
+        proto: tcp
+
+    - name: Verify the PostgreSQL ZFS dataset is mounted
+      ansible.builtin.command:
+        argv:
+          - findmnt
+          - --noheadings
+          - --types
+          - zfs
+          - --mountpoint
+          - "{{ postgresql_data_directory }}"
+      changed_when: false
+      check_mode: false
+
+    - name: Limit the ZFS ARC size across reboots
+      ansible.builtin.copy:
+        dest: /etc/modprobe.d/zfs-arc.conf
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          options zfs zfs_arc_max={{ postgresql_zfs_arc_max }}
+
+    - name: Read the current ZFS ARC limit
+      ansible.builtin.slurp:
+        src: /sys/module/zfs/parameters/zfs_arc_max
+      register: postgresql_zfs_arc_current
+
+    - name: Apply the ZFS ARC limit now
+      ansible.builtin.command:
+        argv:
+          - tee
+          - /sys/module/zfs/parameters/zfs_arc_max
+        stdin: "{{ postgresql_zfs_arc_max }}"
+      when: (postgresql_zfs_arc_current.content | b64decode | trim) != (postgresql_zfs_arc_max | string)
+      changed_when: true
+
+    - name: Create the Docker systemd drop-in directory
+      ansible.builtin.file:
+        path: /etc/systemd/system/docker.service.d
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Require the PostgreSQL ZFS dataset before Docker starts
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/docker.service.d/postgresql-storage.conf
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          [Unit]
+          Requires=zfs-mount.service
+          After=zfs-mount.service
+          RequiresMountsFor={{ postgresql_data_directory }}
+
+          [Service]
+          ExecStartPre=/usr/bin/findmnt --noheadings --types zfs --mountpoint {{ postgresql_data_directory }}
+      register: postgresql_docker_drop_in
+
+    - name: Reload systemd after changing the Docker storage dependency
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+      when: postgresql_docker_drop_in is changed
+
+    - name: Pull the PostgreSQL image
+      community.docker.docker_image:
+        name: "{{ postgresql_image }}"
+        source: pull
+
+    - name: Discover the PostgreSQL group ID in the image
+      ansible.builtin.command:
+        argv:
+          - docker
+          - run
+          - --rm
+          - --network=none
+          - --entrypoint=id
+          - "{{ postgresql_image }}"
+          - -g
+          - postgres
+      register: postgresql_image_group
+      changed_when: false
+      when: not ansible_check_mode
+
+    - name: Install the certificate validation tool
+      ansible.builtin.apt:
+        name: openssl
+        state: present
+
+    - name: Install the PostgreSQL certificate reload helper
+      ansible.builtin.template:
+        src: postgresql-reload-tls.sh.j2
+        dest: /usr/local/sbin/postgresql-reload-tls
+        owner: root
+        group: root
+        mode: '0700'
+      when: not ansible_check_mode
+
+    - name: Configure Vault Agent for PostgreSQL certificates
+      ansible.builtin.include_role:
+        name: vault_agent
+      vars:
+        vault_agent_marker_name: postgresql-server
+        vault_agent_role_id: "{{ postgresql_vault_agent_role_id }}"
+        vault_agent_secret_id: "{{ postgresql_vault_agent_secret_id }}"
+        vault_agent_certificates:
+          - name: postgresql-server
+            product: postgresql
+            paired: true
+            cache_path: /etc/vault-agent.d/postgresql-server-rendered.pem
+            cert_request: postgresql_server_cert_request
+            ttl: 720h
+            common_name: ig11
+            alt_names: ig11.home
+            command: /usr/local/sbin/postgresql-reload-tls
+
+    - name: Apply pending Vault Agent configuration before waiting for certificates
+      ansible.builtin.meta: flush_handlers
+
+    - name: Remove the superseded Vault Agent cache from the TLS mount
+      ansible.builtin.file:
+        path: "{{ postgresql_tls_directory }}/postgresql-server-rendered.pem"
+        state: absent
+
+    - name: Create the PostgreSQL configuration directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+      loop:
+        - "{{ postgresql_config_directory }}"
+        - "{{ postgresql_config_directory }}/conf.d"
+        - "{{ postgresql_config_directory }}/hba.d"
+
+    - name: Install managed PostgreSQL configuration files
+      ansible.builtin.template:
+        src: "{{ item }}.j2"
+        dest: "{{ postgresql_config_directory }}/{{ item }}"
+        owner: root
+        group: root
+        mode: '0644'
+      loop:
+        - postgresql.conf
+        - pg_hba.conf
+      register: postgresql_managed_configuration
+
+    - name: Wait for PostgreSQL certificate files
+      ansible.builtin.wait_for:
+        path: "{{ postgresql_tls_directory }}/{{ item }}"
+        timeout: 180
+      loop:
+        - postgresql-server-cert.pem
+        - postgresql-server-key.pem
+      when: not ansible_check_mode
+
+    - name: Validate and prepare PostgreSQL TLS permissions before container startup
+      ansible.builtin.command: /usr/local/sbin/postgresql-reload-tls
+      changed_when: false
+      when: not ansible_check_mode
+
+    - name: Start PostgreSQL with a persistent data volume and static port forwarding
+      community.docker.docker_container:
+        name: "{{ postgresql_container_name }}"
+        image: "{{ postgresql_image }}"
+        state: started
+        restart_policy: unless-stopped
+        restart: >-
+          {{ postgresql_managed_configuration.results
+             | selectattr('item', 'equalto', 'postgresql.conf')
+             | selectattr('changed') | list | length > 0 }}
+        memory: "{{ postgresql_container_memory }}"
+        published_ports:
+          - "{{ postgresql_listen_address }}:{{ postgresql_port }}:5432/tcp"
+        volumes:
+          - "{{ postgresql_data_directory }}:/var/lib/postgresql"
+          - "{{ postgresql_config_directory }}:/etc/postgresql/custom:ro"
+          - "{{ postgresql_tls_directory }}:/etc/postgresql/tls:ro"
+        command:
+          - postgres
+          - -c
+          - config_file=/etc/postgresql/custom/postgresql.conf
+        env:
+          POSTGRES_USER: "{{ postgresql_admin_user }}"
+          POSTGRES_PASSWORD: "{{ postgresql_admin_password }}"
+          POSTGRES_DB: "{{ postgresql_database }}"
+        shm_size: 512M
+      no_log: true
+
+    - name: Wait for PostgreSQL to accept TCP connections
+      ansible.builtin.command:
+        argv:
+          - docker
+          - exec
+          - "{{ postgresql_container_name }}"
+          - pg_isready
+          - --host=127.0.0.1
+          - --quiet
+      register: postgresql_ready
+      until: postgresql_ready.rc == 0
+      retries: 30
+      delay: 2
+      changed_when: false
+      when: not ansible_check_mode
+
+    - name: Reload PostgreSQL after managed configuration changes
+      ansible.builtin.command:
+        argv:
+          - docker
+          - kill
+          - --signal=HUP
+          - "{{ postgresql_container_name }}"
+      when: postgresql_managed_configuration is changed
+      changed_when: true

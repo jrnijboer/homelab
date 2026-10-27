@@ -1,0 +1,25 @@
+---
+barman_enabled: false
+barman_mount_path: /mnt/backup
+barman_mount_unit: mnt-backup.mount
+barman_disk_uuid: 5451fbc1-1ce0-4f4d-8a21-aa51a129a15e
+barman_repository: "{{ barman_mount_path }}/barman"
+barman_server_name: ig11
+barman_postgresql_host: ig11.home
+barman_postgresql_port: 5432
+barman_postgresql_user: barman
+barman_streaming_user: streaming_barman
+barman_slot_name: barman_ig11
+barman_sslmode: verify-full
+barman_sslrootcert: /etc/ca/nijboer.home.root.pem
+barman_retention_policy: RECOVERY WINDOW OF 7 DAYS
+barman_minimum_redundancy: 2
+barman_backup_calendar: '*-*-* 02:00:00'
+barman_last_backup_maximum_age: 2 DAYS
+barman_last_wal_maximum_age: 26 HOURS
+barman_disk_usage_limit: 90
+barman_packages:
+  - barman
+  - postgresql-client-18
+  - gzip
+  - ca-certificates
