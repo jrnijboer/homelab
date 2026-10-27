@@ -18,7 +18,7 @@
           - name: consul-server
             cert_request: consul_cert_request
             common_name: server.dc1.consul
-            ip_sans: 127.0.0.1
+            ip_sans: 127.0.0.1,{{ ansible_facts['default_ipv4']['address'] }}
             alt_names: consul.home,localhost
             command: systemctl reload consul
             product: consul
