@@ -4,10 +4,12 @@ log_file = "/var/log/nomad/nomad.log"
 log_rotate_duration = "24h"
 log_rotate_max_files = 14
 
-server {
+server  {
   enabled    = true
   encrypt    = "{{ nomad_gossip_key }}"
-  retry_join = ["192.168.179.100", "192.168.179.97", "192.168.179.99"]
+  server_join {
+    retry_join = ["192.168.179.100", "192.168.179.97", "192.168.179.99"]
+  }    
 }
 
 tls {
